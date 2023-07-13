@@ -17,6 +17,7 @@ from jwt_manager import create_token, validate_token
 from fastapi.security import HTTPBearer
 from config.database import Session, engine, Base
 from models.movie import Movie as MovieModel
+from fastapi.encoders import jsonable_encoder
 
 app = FastAPI(
     title="FastAPI with DB", description="Learning purposes", version="0.0.1"
@@ -91,8 +92,10 @@ def login(user: User):
     dependencies=[Depends(JWTBearer())],
 )
 def get_movies() -> List[Movie]:
-    print(movies)
-    return JSONResponse(status_code=status.HTTP_200_OK, content=movies)
+    db = Session() # Create a session to connect to DB
+    result = db.query(MovieModel).all() # Request all data, using the created model
+
+    return JSONResponse(status_code=status.HTTP_200_OK, content=jsonable_encoder(result))
     # Both do the same, because FastAPI by default sends an JSONResponse with the content of the return
     # The following is a redundant way
     # return JSONResponse(content=movies)
@@ -106,14 +109,12 @@ def get_movies() -> List[Movie]:
 )
 # Path is used to validate the path parameter
 def get_movie(id: int = Path(ge=1, le=2000)) -> Movie:
-    movie = [movie for movie in movies if movie["id"] == id]
-    if movie:
-        return movie[0]
+    db = Session()
+    result = db.query(MovieModel).where(MovieModel.id == id).first()
+    if result:
+        return jsonable_encoder(result)
     else:
         raise HTTPException(status_code=404, detail="Movie not found")
-    # return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=[])
-    # response.status_code = status.HTTP_404_NOT_FOUND
-    # return []
 
 
 # Query params have key value
@@ -125,7 +126,8 @@ def get_movies_by_category(
     category: str = Query(min_length=5, max_length=15)
 ) -> List[Movie]:
     # ↑↑↑ FastAPI auto-detects that category is a query param ↑↑↑
-    filteredMovies = [item for item in movies if item["category"] == category]
+    db = Session()
+    filteredMovies = db.query(MovieModel).where(MovieModel.category == category).all()
     if filteredMovies:
         return filteredMovies
     else:
@@ -141,23 +143,38 @@ def get_movies_by_category(
 
 @app.post("/movies", tags=["movies"], response_model=dict, status_code=201)
 def create_movie(movie: Movie) -> dict:
-    movies.append(dict(movie))
+    # Create session to connect to DB
+    db = Session()
+    # Add received data to model (double asterisk used to unpack values from movie)
+    new_movie = MovieModel(**dict(movie))
+    # Add the new registry
+    db.add(new_movie)
+    # Make an update, to save changes
+    db.commit()
+    #movies.append(dict(movie))
     return {"message": "The movie was registered"}
 
 
 @app.put("/movies/{id}", tags=["movies"], response_model=dict)
 def update_movie(id: int, movie: Movie) -> dict:
-    for item in movies:
-        if item["id"] == id:
-            item["title"] = movie.title
-            item["year"] = movie.year
-            item["category"] = movie.category
-            return {"message": "The movie was updated"}
+    db = Session()
+    result = db.query(MovieModel).where(MovieModel.id == id).first()
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Movie not found",)
+    result.title = movie.title
+    result.year = movie.year
+    result.category = movie.category
+    db.commit()
+    return {"message": "The movie was updated"}
+
 
 
 @app.delete("/movies/{id}", tags=["movies"], response_model=dict)
 def delete_movie(id: int) -> dict:
-    for item in movies:
-        if item["id"] == id:
-            movies.remove(item)
-            return {"message": "The movie was deleted"}
+    db = Session()
+    result = db.query(MovieModel).where(MovieModel.id == id).first()
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movie not found",)
+    db.delete(result)
+    db.commit()
+    return {"message": "The movie was deleted"}
