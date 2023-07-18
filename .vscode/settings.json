@@ -1,3 +1,7 @@
 {
-    "python.defaultInterpreterPath": "/home/ramirouf/Documents/cursosPlatzi/cursoFastAPIBDD/env/bin/python3"
+    "python.defaultInterpreterPath": "/home/ramirouf/Documents/cursosPlatzi/cursoFastAPIBDD/env/bin/python3",
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "python.formatting.provider": "none"
 }
